@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的任务 · 项目评审</title>
+  <link rel="stylesheet" href="styles.css?v=20261020-attachments">
+  <link rel="stylesheet" href="workspace-access.css?v=20261020-admin">
+</head>
+<body data-workspace="user">
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-icon">电</span><span><strong>项目评审</strong><small>电力企业项目评审系统</small></span></a>
+    <div class="sidebar-label">用户工作台</div>
+    <nav aria-label="主导航">
+      <button data-view="overview" title="我的任务"><span>✓</span>我的任务</button>
+      <button data-view="chat" title="评审对话"><span>◌</span>评审对话</button>
+      <button data-view="batch" title="项目组"><span>▦</span>项目组</button>
+      <button data-view="reports" title="报告"><span>▤</span>报告</button>
+    </nav>
+    <button class="sidebar-help" data-view="help">ⓘ 使用指南</button>
+    <div class="sidebar-user account-area"><span class="avatar" data-account-avatar>用</span><label class="account-control"><span>用户工作台</span><select data-account-switch aria-label="切换账号（左下角）"><option>用户1</option></select></label></div>
+  </aside>
+  <div class="main-shell">
+    <header class="topbar"><div>用户工作台 <span>/</span> <strong id="breadcrumb">我的任务</strong></div><div class="topbar-right"><span id="connection-state">连接服务中…</span><label class="account-control top-account"><select data-account-switch aria-label="切换账号（右上角）"><option>用户1</option></select></label></div></header>
+    <main id="app" aria-live="polite"><div class="empty">正在加载项目…</div></main>
+  </div>
+  <dialog id="editor"><div id="editor-body"></div></dialog>
+  <input id="file-upload" type="file" accept=".docx,.doc,.pdf,.txt,.zip,.png,.jpg,.jpeg,.tif,.tiff,.bmp" hidden>
+  <div id="toast" role="status"></div>
+  <script src="brief-upload.js?v=20261020-brief" defer></script>
+  <script src="quality-score.js?v=20260915-audit" defer></script>
+  <script src="report-workflows.js?v=20261020-attachments" defer></script>
+  <script src="batch-projects.js?v=20261020-brief" defer></script>
+  <script src="review-agent.js?v=20261019-workspace" defer></script>
+  <script src="check-audit.js?v=20260915-audit" defer></script>
+  <script src="agent-records.js?v=20261019-workspace" defer></script>
+  <script src="model-config.js?v=20260923-models" defer></script>
+  <script src="visual-assets.js?v=20260923-visuals" defer></script>
+  <script src="account-switcher.js?v=20261020-login" defer></script>
+  <script src="user-workspace.js?v=20261019-workspace" defer></script>
+  <script src="app.js?v=20261020-attachments" defer></script>
+</body>
+</html>

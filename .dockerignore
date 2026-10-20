@@ -1,0 +1,7 @@
+.runtime/
+.baseline-20260911/
+artifacts/
+.git/
+**/__pycache__/
+backend/data/
+.env

@@ -1,0 +1,25 @@
+services:
+  review-web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+  review-api:
+    build: ./backend
+    environment:
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      ALIYUN_BASE_URL: ${ALIYUN_BASE_URL:-https://api.example.com/v1}
+      UNIFIED_MODEL: ${UNIFIED_MODEL:-your-model-name}
+      OCR_MODEL: ${OCR_MODEL:-}
+      LLM_ENABLED: ${LLM_ENABLED:-false}
+      LLM_RETRIEVAL_ENABLED: ${LLM_RETRIEVAL_ENABLED:-false}
+    ports:
+      - "8000:8000"
+    volumes:
+      - review-data:/app/data
+      - ./csv:/app/csv:ro
+    restart: unless-stopped
+volumes:
+  review-data:
