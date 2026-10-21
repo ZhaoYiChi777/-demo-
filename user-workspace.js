@@ -8,6 +8,32 @@ const userUI={taskCategory:null,reportCategory:null,projectMode:null,groupId:nul
   pages:{tasks:1,reports:1,groups:1,singles:1,groupReports:1,projectHistory:1,chat:1},
   filters:Object.fromEntries(['tasks','reports','groups','singles','groupReports','projectHistory','chat'].map(key=>[key,{query:'',after:'',before:''}]))};
 const userProjectHistory={projectId:null,runs:[],loading:false,error:'',request:0};
+const userRanking={runId:null,rows:[],group:null,error:''};
+
+async function loadUserRanking(run){
+  userRanking.runId=run.id;userRanking.rows=[];userRanking.group=null;userRanking.error='';
+  try{
+    const data=await api('/api/workbench/batches');
+    const group=data.batches.find(item=>item.project_id===run.project_id);
+    if(!group)return;
+    const result=await api(`/api/workbench/project-comparison?batch_id=${id(group.id)}`);
+    if(userRanking.runId===run.id){userRanking.rows=result.rows;userRanking.group=group;}
+  }catch(error){if(userRanking.runId===run.id)userRanking.error='组内排名暂未加载';}
+}
+function userScoreValue(run){
+  if(!run)return '<span class="user-score-value">—<small>未评审</small></span>';
+  const quality=qualityScore(run),value=quality.total;
+  const label=value===null?'评分待完成':comparisonScore(run)===null?'暂计 · 不参与排名':quality.provisional?'暂计分':'参考分';
+  return `<span class="user-score-value"><strong>${value?.toFixed(1)??'—'}</strong>${quality.grade?`<span class="user-score-grade">${esc(quality.grade)}类</span>`:''}<small>${label}</small></span>`;
+}
+function userScoreAnalysis(run,context){
+  if(!run)return '';
+  const source=context?.rows||(userRanking.group?.project_id===run.project_id?userRanking.rows:[]);
+  const rows=source.map(row=>row.run?.id===run.id?{...row,run}:row).filter(row=>comparisonScore(row.run)!==null).sort((a,b)=>compareQualityRows(a,b,'score'));
+  const index=rows.findIndex(row=>row.run.id===run.id),rank=index>=0?{rows,sort:'score'}:null;
+  const status=rank?`组内第 ${index+1} / ${rows.length} 名`:comparisonScore(run)===null?'待核验 · 暂不排名':userRanking.runId===run.id&&userRanking.error?userRanking.error:userRanking.group?.project_id===run.project_id?'历史评审 · 不参与当前排名':'未参与组内排名';
+  return `<details class="panel user-score-analysis no-print"><summary><span><strong>分数分析</strong><span class="user-score-rank">${esc(status)}</span></span>${userScoreValue(run)}</summary>${scorePanel(run,rank)}</details>`;
+}
 
 function applyUserRoute(value='overview'){
   const parts=String(value||'overview').split('/'),view=NAV[parts[0]]?parts[0]:'overview';
@@ -126,12 +152,15 @@ function renderUserGroupReports(){
   if(projectBatch.loading)return title+'<section class="panel empty">正在加载…</section>';
   if(projectBatch.error||!group)return title+`<section class="panel empty">${esc(projectBatch.error||'未找到项目组')}</section>`;
   const rows=filteredBatchRows().filter(row=>matchesUserFilter(`${batchReportName(row.project)} ${row.project.filename||''}`,row.run?.created_at||row.project.created_at,'groupReports'));
-  const controls=userSearch('groupReports','搜索组内报告',true)+`<div class="list-actions"><label>评审结果 <select id="project-batch-filter">${options({all:'全部',pass:'符合',fail:'不符合',pending:'待确认',unreviewed:'未评审',error:'处理失败'},projectBatch.filter)}</select></label><div class="row wrap">${button('刷新','data-batch-refresh')}${button('继续未完成报告',`data-batch-resume ${projectBatch.busy?'disabled':''}`)}${group.project_id?button('项目材料',`data-user-materials="${esc(group.project_id)}"`):''}</div></div>`;
-  const table=`<section class="panel"><div class="table-scroll"><table class="user-group-table"><thead><tr><th>报告</th><th>进度</th><th>评审结果</th><th>评审时间</th><th>操作</th></tr></thead><tbody>${userPageRows(rows,'groupReports').map(row=>{
+  const ranked=projectBatch.rows.filter(row=>comparisonScore(row.run)!==null).sort((a,b)=>compareQualityRows(a,b,'score'));
+  const ranks=new Map(ranked.map((row,index)=>[batchRowKey(row.project),index+1]));
+  const pageRows=userPageRows(rows,'groupReports'),selected=pageRows.find(row=>row.run&&batchRowKey(row.project)===projectBatch.selected)||pageRows.find(row=>row.run);
+  const controls=userSearch('groupReports','搜索组内报告',true)+`<div class="list-actions"><div class="row wrap"><label>评审结果 <select id="project-batch-filter">${options({all:'全部',pass:'符合',fail:'不符合',pending:'待确认',unreviewed:'未评审',error:'处理失败'},projectBatch.filter)}</select></label><label>排序方式 <select id="project-batch-sort">${options({score:'参考分由高到低',fail:'不符合项由少到多',pending:'待确认项由少到多',time:'评审时间由新到旧'},projectBatch.sort)}</select></label></div><div class="row wrap">${button('刷新','data-batch-refresh')}${button('继续未完成报告',`data-batch-resume ${projectBatch.busy?'disabled':''}`)}${group.project_id?button('项目材料',`data-user-materials="${esc(group.project_id)}"`):''}</div></div>`;
+  const table=`<section class="panel"><div class="table-scroll"><table class="user-group-table"><thead><tr><th>排名</th><th>报告</th><th>评分</th><th>进度</th><th>评审结果</th><th>评审时间</th><th>操作</th></tr></thead><tbody>${pageRows.map(row=>{
     const p=row.project,key=batchRowKey(p),run=row.run;
-    return `<tr><td><strong>${esc(batchReportName(p))}</strong></td><td>${esc(BATCH_STATUS[p.batch_status]||(run?'评审完成':'未评审'))}${p.error?`<p class="fail-text">${esc(p.error)}</p>`:''}</td><td>${run?badge(conclusionStyle(run),runTitle(run)):'—'}</td><td><time>${esc(date(run?.created_at))}</time></td><td><div class="batch-row-actions">${run?button('查看报告',`data-user-run="${esc(run.id)}" data-user-destination="reports"`)+button('处理问题',`data-user-run="${esc(run.id)}"`)+button('提问',`data-user-run="${esc(run.id)}" data-user-destination="chat"`):''}${p.batch_id?button(p.batch_status==='error'?'重试':run?'重新评审':'继续处理',`data-batch-retry="${esc(key)}" ${projectBatch.busy?'disabled':''}`):''}${p.batch_id&&!p.uploaded?`<label class="batch-replace">选择报告<input type="file" accept=".docx,.doc,.pdf,.txt" data-batch-file="${esc(key)}" ${projectBatch.busy?'disabled':''}></label>`:''}</div></td></tr>`;
-  }).join('')||'<tr><td colspan="5" class="empty">暂无匹配的报告</td></tr>'}</tbody></table></div></section>`;
-  return title+controls+(projectBatch.progress?`<div class="notice" role="status">${esc(projectBatch.progress)}</div>`:'')+table+userPagination(rows.length,'groupReports');
+    return `<tr class="${selected===row?'comparison-selected':''}"><td><span class="user-rank">${ranks.get(key)||'—'}</span></td><td>${run?button(esc(batchReportName(p)),`data-batch-score="${esc(key)}"`,'subtle user-score-report'):`<strong>${esc(batchReportName(p))}</strong>`}</td><td>${userScoreValue(run)}</td><td>${esc(BATCH_STATUS[p.batch_status]||(run?'评审完成':'未评审'))}${p.error?`<p class="fail-text">${esc(p.error)}</p>`:''}</td><td>${run?badge(conclusionStyle(run),runTitle(run)):'—'}</td><td><time>${esc(date(run?.created_at))}</time></td><td><div class="batch-row-actions">${run?button('查看报告',`data-user-run="${esc(run.id)}" data-user-destination="reports"`)+button('处理问题',`data-user-run="${esc(run.id)}"`)+button('提问',`data-user-run="${esc(run.id)}" data-user-destination="chat"`):''}${p.batch_id?button(p.batch_status==='error'?'重试':run?'重新评审':'继续处理',`data-batch-retry="${esc(key)}" ${projectBatch.busy?'disabled':''}`):''}${p.batch_id&&!p.uploaded?`<label class="batch-replace">选择报告<input type="file" accept=".docx,.doc,.pdf,.txt" data-batch-file="${esc(key)}" ${projectBatch.busy?'disabled':''}></label>`:''}</div></td></tr>`;
+  }).join('')||'<tr><td colspan="7" class="empty">暂无匹配的报告</td></tr>'}</tbody></table></div></section>`;
+  return title+controls+(projectBatch.progress?`<div class="notice" role="status">${esc(projectBatch.progress)}</div>`:'')+table+userPagination(rows.length,'groupReports')+userScoreAnalysis(selected?.run,{rows:ranked});
 }
 async function loadUserProjectHistory(){
   const projectId=userUI.projectId,request=++userProjectHistory.request;
@@ -199,9 +228,9 @@ function renderUserReview(){
   if(!state.project)return noProject();
   const title=heading(projectName(state.project),'',button('← 我的任务',`data-view="${userUI.taskCategory?`overview/${userUI.taskCategory}`:'overview'}"`)+button('提问','data-view="chat"'));
   const controls=`<div class="user-review-controls"><div class="segmented">${[['material','材料'],['decision','问题与复核'],['report','报告']].map(([key,label])=>button(label,key==='report'?'data-current-report':`data-step="${key}"`,state.step===key?'active':'')).join('')}</div>${button(state.busy?'评审中…':state.run?'重新评审':'开始评审',`data-run ${state.busy?'disabled':''}`,'primary')}</div>`;
-  const brief=state.run?`<section class="panel user-result"><div class="row wrap"><h2>${esc(reviewProgressTitle(state.run))}</h2>${badge(conclusionStyle(state.run),runTitle(state.run))}</div><div class="record-meta"><span>${esc(state.run.scope_name)}</span><span>${state.run.counts.pass} 项符合 · ${state.run.counts.fail} 项不符合 · ${state.run.counts.pending} 项待确认</span>${state.run.status==='archived'?'<span class="pill archived">已归档</span>':''}</div></section>`:'';
+  const brief=state.run?`<section class="panel user-result"><div class="row spread wrap"><div class="row wrap"><h2>${esc(reviewProgressTitle(state.run))}</h2>${badge(conclusionStyle(state.run),runTitle(state.run))}</div>${userScoreValue(state.run)}</div><div class="record-meta"><span>${esc(state.run.scope_name)}</span><span>${state.run.counts.pass} 项符合 · ${state.run.counts.fail} 项不符合 · ${state.run.counts.pending} 项待确认</span>${state.run.status==='archived'?'<span class="pill archived">已归档</span>':''}</div></section>`:'';
   const content=state.step==='material'?materialsContent():state.step==='report'?reportContent():state.run?checksContent():`<section class="panel empty">${button('上传材料','data-upload','primary')}</section>`;
-  return title+controls+staleNotice()+brief+`<div class="review-content gap">${content}</div>`;
+  return title+controls+staleNotice()+brief+(state.run&&state.step==='decision'?userScoreAnalysis(state.run):'')+`<div class="review-content gap">${content}</div>`;
 }
 function renderUserMaterials(){
   if(!state.project)return heading('项目材料','',button('选择项目','data-view="batch/single"','primary'));
@@ -217,11 +246,13 @@ async function openUserRun(runId,destination='review'){
   state.run=run;state.scope=run.material_package_id;state.step='decision';
   state.rules=(await api(`/api/workbench/rules?project_id=${id(run.project_id)}${state.scope!==null?'&material_package_id='+id(state.scope):''}`)).rules;
   if(destination==='reports')return openUserReport(run);
+  await loadUserRanking(run);
   if(destination==='chat'){userUI.chatRestored=true;localStorage.setItem('review-workbench-selected-report',run.id);}
   userUI.chatOpen=false;navigate(destination);
 }
 async function openUserReport(run=state.run){
   userUI.filters.reports.query='';
+  if(run)await loadUserRanking(run);
   await navigate('reports/all');
   if(state.view==='reports'&&run){
     const index=Array.isArray(passedReports)?passedReports.findIndex(item=>item.id===run.id):-1;

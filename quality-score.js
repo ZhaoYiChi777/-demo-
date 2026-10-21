@@ -32,7 +32,7 @@ function rankExplanation(run,context){
     else detail=`上一名${sort==='fail'?'不符合':'待确认'} ${previous.counts[sort]} 项，本报告 ${run.counts[sort]} 项。相同时按待确认项数、评审时间、记录编号依次决定顺序。`;
   }
   if(new Set(rows.filter(r=>r.run).map(r=>qualityScore(r.run).policy)).size>1)detail='列表包含不同评分口径，当前顺序仅用于浏览；请统一重新评审后再比较分数高低。';
-  return `<section class="rank-explanation"><h3>为什么排在这里</h3><p>当前筛选范围：第 <b>${index+1}</b> / ${rows.length} 位，按“${names[sort]}”排列。</p><p>${esc(detail)}</p><small>仅比较当前列表中的最近评审。规则版本、适用专业或课题要求不同的项目，排名仅供筛选参考。未审查记录排在最后；按参考分排序时，缺少维度的记录排在有分数记录之后。</small></section>`;
+  return `<section class="rank-explanation"><h3>为什么排在这里</h3><p>当前比较范围：第 <b>${index+1}</b> / ${rows.length} 位，按“${names[sort]}”排列。</p><p>${esc(detail)}</p><small>仅比较当前列表中的最近评审。规则版本、适用专业或课题要求不同的项目，排名仅供筛选参考。未审查记录排在最后；按参考分排序时，缺少维度的记录排在有分数记录之后。</small></section>`;
 }
 function scorePanel(run,context){
   if(!run)return '<div class="panel-body muted">尚无评分，完成审查后显示。</div>';

@@ -93,7 +93,7 @@ document.addEventListener('click',event=>{const b=event.target.closest('button')
   if(b.hasAttribute('data-batch-overview'))return navigate('batch');
   if(b.hasAttribute('data-batch-refresh'))return loadProjectBatch();
   if(b.hasAttribute('data-batch-resume'))return processBatchRows(projectBatch.rows.filter(r=>r.project.batch_id===projectBatch.batchId&&r.project.batch_status!=='completed'));
-  if(b.dataset.batchScore){projectBatch.selected=b.dataset.batchScore;render();}
+  if(b.dataset.batchScore){projectBatch.selected=b.dataset.batchScore;render();if(USER_MODE){const analysis=$('.user-score-analysis');if(analysis){analysis.open=true;analysis.scrollIntoView({block:'start',behavior:'smooth'});}}}
   if(b.dataset.batchRetry){const row=projectBatch.rows.find(r=>batchRowKey(r.project)===b.dataset.batchRetry);if(row)return processBatchRows([row]);}
   if(b.dataset.batchOpen){const row=projectBatch.rows.find(r=>batchRowKey(r.project)===b.dataset.batchOpen);await selectProject(row.project.id);state.run=await api(`/api/workbench/runs/${id(row.run.id)}`);state.scope=state.run.material_package_id;state.rules=(await api(`/api/workbench/rules?project_id=${id(row.project.id)}${state.scope!==null?'&material_package_id='+id(state.scope):''}`)).rules;state.step='decision';render();}
 });});
@@ -101,8 +101,8 @@ document.addEventListener('change',event=>{
   const input=event.target;
   if(input.id==='batch-files'){batchDraft=Array.from(input.files||[]);renderBatchMapping();}
   if(input.id==='project-batch-scope'){projectBatch.batchId=input.value;guarded(loadProjectBatch);}
-  if(input.id==='project-batch-filter'){projectBatch.filter=input.value;render();}
-  if(input.id==='project-batch-sort'){projectBatch.sort=input.value;render();}
+  if(input.id==='project-batch-filter'){projectBatch.filter=input.value;if(USER_MODE)userUI.pages.groupReports=1;render();}
+  if(input.id==='project-batch-sort'){projectBatch.sort=input.value;if(USER_MODE)userUI.pages.groupReports=1;render();}
   if(input.dataset.batchFile&&input.files[0]){projectBatch.files.set(input.dataset.batchFile,input.files[0]);render();}
 });
 document.addEventListener('input',event=>{if(event.target.id==='project-batch-search'){projectBatch.search=event.target.value;const pos=event.target.selectionStart;render();const input=document.getElementById('project-batch-search');input.focus();input.setSelectionRange(pos,pos);}});

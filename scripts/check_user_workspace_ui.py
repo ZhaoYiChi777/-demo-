@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 from check_admin_workspace import browser_login
 
 ROOT=Path(__file__).resolve().parents[1]
-OUTPUT=ROOT/'artifacts'/'user-workspace-20261019'
+OUTPUT=ROOT/'artifacts'/'user-workspace-20261021'
 API='http://127.0.0.1:18000'
 WEB='http://127.0.0.1:18080'
 SERVER='''
@@ -191,6 +191,9 @@ def main():
                 page.locator('.history-summary').first.click()
                 page.wait_for_function('state.view==="reports" && expandedReport')
                 assert page.locator('.report-paper').is_visible()
+                page.locator('.user-score-analysis > summary').click()
+                assert page.locator('.user-score-analysis .score-total').is_visible()
+                assert page.locator('.user-score-analysis .score-dimension').count()>0
                 with page.expect_download() as download:
                     page.locator('[data-export]').click()
                 download.value.save_as(OUTPUT/'review-report.docx')
@@ -200,6 +203,9 @@ def main():
                 demo=page.evaluate("async()=>await api('/test/demo','POST')")
                 original_run=demo['run']['id']
                 page.evaluate(f"openUserRun('{original_run}')")
+                page.locator('.user-score-analysis > summary').click()
+                assert page.locator('.user-result .user-score-value').is_visible()
+                assert page.locator('.user-score-analysis .score-total').is_visible()
                 page.locator('[data-check=DEMO-004]').click()
                 assert page.locator('[data-edit-rule]').count()==0
                 page.locator('[data-adjudicate=DEMO-004]').click()
@@ -238,6 +244,42 @@ def main():
                 page.wait_for_function('!projectBatch.busy && projectBatch.rows.every(r=>r.run)',timeout=60000)
                 assert page.evaluate('new Set(projectBatch.rows.map(r=>r.project.id)).size')==1
                 assert page.evaluate('new Set(projectBatch.rows.map(r=>r.run.material_package_id)).size')==2
+                assert page.locator('.user-group-table th').all_text_contents()[:3]==['排名','报告','评分']
+                page.evaluate('''()=>{
+                  const seed=structuredClone(projectBatch.rows[0]);
+                  projectBatch.rows=Array.from({length:12},(_,index)=>{
+                    const row=structuredClone(seed);
+                    row.project.item_id='SCORE-'+String(index).padStart(2,'0');
+                    row.project.report_name='排名样例'+String(index+1).padStart(2,'0');
+                    row.run.id='SCORE-RUN-'+index;
+                    row.run.created_at='2026-10-'+String(index+1).padStart(2,'0')+'T08:00:00Z';
+                    row.run.quality_score={...row.run.quality_score,total:90-index*2,provisional:false,comparable:true,grade:'A'};
+                    if(index===10)row.run.quality_score={...row.run.quality_score,total:95,provisional:true,comparable:false};
+                    if(index===11)row.run=null;
+                    return row;
+                  });
+                  projectBatch.sort='score';userUI.pages.groupReports=1;render();
+                }''')
+                assert page.locator('.user-rank').all_text_contents()==[str(i) for i in range(1,9)]
+                assert page.locator('.user-group-table .user-score-value strong').first.inner_text()=='90.0'
+                page.get_by_role('button',name='下一页',exact=True).click()
+                assert page.locator('.user-rank').all_text_contents()==['9','10','—','—']
+                assert '95.0' in page.locator('.user-group-table').inner_text()
+                assert '暂计 · 不参与排名' in page.locator('.user-group-table').inner_text()
+                page.locator('[data-batch-score="SCORE-08"]').click()
+                assert page.locator('.user-score-analysis .score-total').is_visible()
+                assert '74.0' in page.locator('.user-score-analysis .score-total').inner_text()
+                assert '组内第 9 / 10 名' in page.locator('.user-score-rank').inner_text()
+                screenshot(page,'04a-ranking-analysis.png')
+                page.locator('#project-batch-sort').select_option('time')
+                assert page.evaluate('userUI.pages.groupReports')==1
+                assert page.locator('.user-rank').all_text_contents()[:3]==['—','10','9']
+                page.locator('#project-batch-sort').select_option('score')
+                page.locator('#user-groupReports-query').fill('排名样例10')
+                assert page.locator('.user-rank').all_text_contents()==['10']
+                page.locator('[data-user-clear=groupReports]').click()
+                page.evaluate('loadProjectBatch()')
+                page.wait_for_function('!projectBatch.loading && projectBatch.rows.length===2')
                 page.locator('#user-groupReports-query').fill('报告甲')
                 assert page.locator('[data-user-destination=reports]').count()==1
                 page.locator('[data-user-clear=groupReports]').click()
@@ -326,9 +368,12 @@ def main():
                 assert page.evaluate('state.run.scope_name')=='报告甲'
 
                 page.set_viewport_size({'width':390,'height':844})
-                for route in ('overview','overview/unreviewed','batch','batch/single','projects','reports','reports/all','chat'):
+                for route in ('overview','overview/unreviewed','batch',f'batch/group/{group["id"]}','batch/single','projects','review','reports','reports/all','chat'):
                     page.evaluate('(route)=>navigate(route)',route)
                     page.wait_for_load_state('networkidle')
+                    if route=='review':
+                        page.locator('.user-score-analysis > summary').click()
+                        assert page.locator('.user-score-analysis .score-total').is_visible()
                     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),route
                     assert page.get_by_label('切换账号（左下角）').is_visible()
                     assert page.get_by_label('切换账号（右上角）').is_visible()
@@ -356,7 +401,7 @@ def main():
                 assert page.locator('.task-entry-grid .entry-card').count()==7
                 assert not errors,errors
                 browser.close()
-                result='PASS: two account selectors in both workspaces; category-first tasks/projects/reports; nested history routes and reload; inclusive date and keyword searches; task/report pagination and reset; real upload and retry; report-scope selection and chat history; DOCX/PDF export; mobile layout; administrator rules/models. Model replies simulated; all writes used a temporary database.'
+                result='PASS: account switching; category-first navigation; search and pagination; group rankings and scores across pages; invalid scores excluded from ranking; sorting reset; review/report score analysis; real upload and retry; report-scope chat; DOCX/PDF export; mobile layout; administrator rules/models. Model replies simulated; all writes used a temporary database.'
                 (OUTPUT/'validation.txt').write_text(result+'\n',encoding='utf-8')
                 print(result)
         finally:
